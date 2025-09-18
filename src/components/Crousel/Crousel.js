@@ -1,102 +1,206 @@
-import React, { useRef, useEffect, useState } from 'react';
+import React, { useRef, useEffect, useState } from "react";
 import {
   View,
   Text,
   Image,
-  FlatList,
   StyleSheet,
   Dimensions,
   Animated,
-} from 'react-native';
+  TouchableOpacity,
+} from "react-native";
 
-const { width, height } = Dimensions.get('window');
-const CARD_WIDTH = width * 0.9;
-const SPACING = width * 0.05;
+const { width, height } = Dimensions.get("window");
+const CARD_WIDTH = width * 0.75;
+const SPACING = 12;
+const FOCUSED_CARD_MARGIN = (width - CARD_WIDTH) / 2;
 
 const Carousel = ({ superDiscountProducts }) => {
+  const scrollX = useRef(new Animated.Value(0)).current;
   const flatListRef = useRef(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const progressAnim = useRef(new Animated.Value(0)).current;
+  const [data, setData] = useState([]);
 
-  // Animate the progress bar every 3 seconds
+  // Set up data after component mounts to avoid issues with empty arrays
+  useEffect(() => {
+    if (superDiscountProducts.length > 0) {
+      setData([...superDiscountProducts, ...superDiscountProducts, ...superDiscountProducts]);
+    }
+  }, [superDiscountProducts]);
+
+  const middleIndexOffset = superDiscountProducts.length;
+
+  useEffect(() => {
+    if (data.length === 0) return;
+
+    // Initial scroll to the middle section
+    setTimeout(() => {
+      flatListRef.current?.scrollToIndex({
+        index: middleIndexOffset,
+        animated: false,
+      });
+      setCurrentIndex(middleIndexOffset);
+      startProgressBar();
+    }, 10);
+  }, [data]);
+
+  // Auto-scroll
+  useEffect(() => {
+    if (data.length === 0) return;
+
+    const intervalId = setInterval(() => {
+      let nextIndex = currentIndex + 1;
+
+      // If we are at the end of the duplicated list's middle section, jump back to the start
+      if (nextIndex >= middleIndexOffset * 2) {
+        flatListRef.current?.scrollToIndex({
+          index: middleIndexOffset,
+          animated: false,
+        });
+        setCurrentIndex(middleIndexOffset);
+      } else {
+        flatListRef.current?.scrollToIndex({
+          index: nextIndex,
+          animated: true,
+        });
+        setCurrentIndex(nextIndex);
+      }
+
+      startProgressBar();
+    }, 4000);
+
+    return () => clearInterval(intervalId);
+  }, [currentIndex, data.length]);
+
   const startProgressBar = () => {
     progressAnim.setValue(0);
     Animated.timing(progressAnim, {
       toValue: 1,
-      duration: 3000,
+      duration: 4000,
       useNativeDriver: false,
     }).start();
   };
 
-  useEffect(() => {
+  const onMomentumScrollEnd = (event) => {
+    const offset = event.nativeEvent.contentOffset.x;
+    const newIndex = Math.round((offset + FOCUSED_CARD_MARGIN) / (CARD_WIDTH + SPACING));
+
+    // Logic to handle infinite scrolling loop
+    if (newIndex < middleIndexOffset) {
+      const newScrollIndex = newIndex + superDiscountProducts.length;
+      flatListRef.current?.scrollToIndex({ index: newScrollIndex, animated: false });
+      setCurrentIndex(newScrollIndex);
+    } else if (newIndex >= middleIndexOffset * 2) {
+      const newScrollIndex = newIndex - superDiscountProducts.length;
+      flatListRef.current?.scrollToIndex({ index: newScrollIndex, animated: false });
+      setCurrentIndex(newScrollIndex);
+    } else {
+      setCurrentIndex(newIndex);
+    }
+
     startProgressBar();
-    const intervalId = setInterval(() => {
-      const nextIndex = (currentIndex + 1) % superDiscountProducts.length;
-      flatListRef.current?.scrollToIndex({ index: nextIndex, animated: true });
-      setCurrentIndex(nextIndex);
-      startProgressBar();
-    }, 3000);
+  };
 
-    return () => clearInterval(intervalId);
-  }, [currentIndex, superDiscountProducts.length]);
+  const getItemLayout = (_, index) => ({
+    length: CARD_WIDTH + SPACING,
+    offset: (CARD_WIDTH + SPACING) * index,
+    index,
+  });
 
-  const renderItem = ({ item }) => (
-    <View style={styles.card}>
-      {/* Discount Badge */}
-      {/* {item.discount && (
-        <View style={styles.discountBadge}>
-          <Text style={styles.discountText}>{item.discount}% OFF</Text>
-        </View>
-      )} */}
+  const renderItem = ({ item, index }) => {
+    const inputRange = [
+      (index - 1) * (CARD_WIDTH + SPACING),
+      index * (CARD_WIDTH + SPACING),
+      (index + 1) * (CARD_WIDTH + SPACING),
+    ];
 
-      {/* Product Image */}
-      {item?.image ? <Image source={item.image} style={styles.image} /> : <Image
-        source={require('../../assets/img/placeholder.png')}
-        style={styles.categoryImage}
-      />}
-    </View>
-  );
+    const scale = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.9, 1, 0.9],
+      extrapolate: "clamp",
+    });
+
+    const opacity = scrollX.interpolate({
+      inputRange,
+      outputRange: [0.7, 1, 0.7],
+      extrapolate: "clamp",
+    });
+
+    return (
+      <Animated.View
+        style={[
+          styles.card,
+          { transform: [{ scale }], opacity },
+        ]}
+      >
+        <Image
+          source={item?.image || require("../../assets/img/placeholder.png")}
+          style={styles.image}
+        />
+        {/* <View style={styles.overlay}>
+          <Text style={styles.title}>{item?.title || "Special Deal"}</Text>
+          <Text style={styles.subtitle}>
+            {item?.subtitle || "Get exciting offers now!"}
+          </Text>
+          <TouchableOpacity style={styles.button}>
+            <Text style={styles.buttonText}>Shop Now</Text>
+          </TouchableOpacity>
+        </View> */}
+      </Animated.View>
+    );
+  };
+
+  if (data.length === 0) {
+    return null; // or a loading indicator
+  }
 
   return (
     <View style={styles.container}>
-      <FlatList
+      <Animated.FlatList
         ref={flatListRef}
-        horizontal
-        pagingEnabled
-        snapToAlignment="center"
-        showsHorizontalScrollIndicator={false}
-        data={superDiscountProducts}
+        data={data}
         keyExtractor={(_, index) => index.toString()}
         renderItem={renderItem}
-        getItemLayout={(_, index) => ({
-          length: CARD_WIDTH + SPACING,
-          offset: (CARD_WIDTH + SPACING) * index,
-          index,
-        })}
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        snapToInterval={CARD_WIDTH + SPACING}
+        decelerationRate="fast"
         contentContainerStyle={{
-          paddingHorizontal: (width - CARD_WIDTH) / 4, // centers the first and last cards
+          paddingHorizontal: FOCUSED_CARD_MARGIN - SPACING / 2,
         }}
+        onMomentumScrollEnd={onMomentumScrollEnd}
+        onScroll={Animated.event(
+          [{ nativeEvent: { contentOffset: { x: scrollX } } }],
+          { useNativeDriver: true }
+        )}
+        scrollEventThrottle={16}
+        getItemLayout={getItemLayout}
+        initialScrollIndex={middleIndexOffset}
       />
 
-      {/* Progress indicators container */}
+      {/* Progress indicators - they use the original array length */}
       <View style={styles.progressContainer}>
-        {superDiscountProducts.map((_, index) => (
-          <View key={index} style={styles.progressIndicatorBackground}>
-            {index === currentIndex && (
-              <Animated.View
-                style={[
-                  styles.progressIndicatorFill,
-                  {
-                    width: progressAnim.interpolate({
-                      inputRange: [0, 1],
-                      outputRange: ['0%', '100%'],
-                    }),
-                  },
-                ]}
-              />
-            )}
-          </View>
-        ))}
+        {superDiscountProducts.map((_, index) => {
+          // Calculate the original index from the duplicated list's currentIndex
+          const originalIndex = currentIndex % superDiscountProducts.length;
+          return (
+            <View key={index} style={styles.progressIndicatorBackground}>
+              {index === originalIndex && (
+                <Animated.View
+                  style={[
+                    styles.progressIndicatorFill,
+                    {
+                      width: progressAnim.interpolate({
+                        inputRange: [0, 1],
+                        outputRange: ["0%", "100%"],
+                      }),
+                    },
+                  ]}
+                />
+              )}
+            </View>
+          );
+        })}
       </View>
     </View>
   );
@@ -104,66 +208,74 @@ const Carousel = ({ superDiscountProducts }) => {
 
 export default Carousel;
 
+// Styles remain the same
 const styles = StyleSheet.create({
   container: {
-    alignItems: 'center',
+    alignItems: "center",
   },
   card: {
     width: CARD_WIDTH,
     marginHorizontal: SPACING / 2,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-    borderColor: '#ddd',
-    borderWidth: 1,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-    marginBottom: 10,
-    position: 'relative',
-    overflow: 'hidden', // important to keep image within rounded corners
-    height: height * 0.25, // define a fixed height for the card
-    padding: 0, // remove padding so image fills fully
+    borderRadius: 16,
+    overflow: "hidden",
+    height: height * 0.25,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 3 },
+    elevation: 5,
   },
-
   image: {
-    width: '100%',
-    height: '100%',
-    resizeMode: 'cover', // cover instead of stretch
+    width: "100%",
+    height: "100%",
+    resizeMode: "cover",
+    position: "absolute",
   },
-
-  discountBadge: {
-    position: 'absolute',
-    top: 10,
-    left: 10,
-    backgroundColor: 'red',
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 5,
-    zIndex: 1,
+  overlay: {
+    flex: 1,
+    justifyContent: "flex-end",
+    padding: 16,
+    backgroundColor: "rgba(0,0,0,0.3)",
   },
-  discountText: {
-    color: 'white',
-    fontSize: 12,
+  title: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "700",
+  },
+  subtitle: {
+    color: "#f1f1f1",
+    fontSize: 14,
+    marginVertical: 4,
+  },
+  button: {
+    alignSelf: "flex-start",
+    backgroundColor: "#fff",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+    marginTop: 6,
+  },
+  buttonText: {
+    color: "#000",
+    fontWeight: "600",
   },
   progressContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
     marginTop: 10,
   },
   progressIndicatorBackground: {
     height: 3,
-    width: 20,
-    backgroundColor: '#ddd',
+    width: 25,
+    backgroundColor: "#ddd",
     borderRadius: 3,
     marginHorizontal: 3,
-    overflow: 'hidden',
+    overflow: "hidden",
   },
   progressIndicatorFill: {
-    height: '100%',
-    backgroundColor: '#2196F3',
+    height: "100%",
+    backgroundColor: "#2196F3",
   },
 });

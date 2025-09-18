@@ -3,7 +3,7 @@ import axios from 'axios';
 // import {navigationRef} from './Navigation';
 
 const axiosInstance = axios.create({
-  // baseURL: 'http://192.168.29.16:8080/eatsoo/',
+  // baseURL: 'http://192.168.1.27:8080/eatsoo/',
   baseURL: 'http://192.168.29.16:8080/eatsoo/',
 
   // baseURL: 'http://localhost:8080/eatsoo/',

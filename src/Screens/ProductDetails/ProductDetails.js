@@ -13,20 +13,7 @@ import Icon from 'react-native-vector-icons/MaterialIcons'; // For icons
 import Header from '../../components/Header';
 
 // Get screen dimensions
-const {width, height} = Dimensions.get('window');
-
-// Mock product data (replace with actual data from API or props)
-const product = {
-  id: 1,
-  name: 'Fresh Apples',
-  image: require('../../assets/img/apple.png'), // Replace with actual image
-  description:
-    'Crisp and juicy fresh apples, perfect for snacking or baking. Grown organically with no artificial additives.',
-  rating: 4.5,
-  price: '$2.99',
-  discount: '10% off',
-  originalPrice: '$3.33',
-};
+const { width, height } = Dimensions.get('window');
 
 // Mock data for similar products and recommended products
 const similarProducts = [
@@ -77,15 +64,36 @@ const recommendedProducts = [
   },
 ];
 
-const ProductDetailsPage = ({route}) => {
+const ProductDetailsPage = (props) => {
+  // Extract product data from props
+  const productData = props?.route?.params?.productData;
+
+  // Format the product data for use in the component
+  const product = {
+    id: productData?.inventoryID,
+    name: productData?.name,
+    image: productData?.image?.path
+      ? { uri: productData.image.path }
+      : require('../../assets/img/apple.png'), // Fallback image
+    description: productData?.description || 'No description available',
+    rating: parseFloat(productData?.averageRating) || 0,
+    price: `₹${productData?.sellers?.[0]?.seller_inventory?.price || '0.00'}`,
+    discount: productData?.isOnSale ? '10% off' : '',
+    originalPrice: productData?.isOnSale
+      ? `₹${(parseFloat(productData?.sellers?.[0]?.seller_inventory?.price || 0) / 0.9).toFixed(2)}`
+      : '',
+  };
+
   // Handle Add to Cart
   const handleAddToCart = productId => {
     console.log(`Added product ${productId} to cart`);
     // Add your logic to handle adding to cart
   };
 
+  console.log('product?.image?.path', product?.image)
+
   // Render similar or recommended product item
-  const renderProductItem = ({item}) => (
+  const renderProductItem = ({ item }) => (
     <TouchableOpacity style={styles.productItem}>
       <Image source={item.image} style={styles.productItemImage} />
       <Text style={styles.productItemName}>{item.name}</Text>
@@ -103,7 +111,7 @@ const ProductDetailsPage = ({route}) => {
   );
 
   return (
-    <View style={{flex: 1}}>
+    <View style={{ flex: 1 }}>
       <Header
         title="Product Details"
         showBackButton={true}
@@ -112,8 +120,13 @@ const ProductDetailsPage = ({route}) => {
       <View style={styles.container}>
         <ScrollView>
           {/* Product Image */}
-          <View style={{alignItems: 'center', marginTop: 20}}>
-            <Image source={product.image} style={[styles.productImage]} />
+          <View style={{ alignItems: 'center', marginTop: 20 }}>
+            <Image source={{
+              uri: `http://192.168.1.27:8080/${product?.image?.uri.replace(
+                /\\/g,
+                '/',
+              )}`,
+            }} style={[styles.productImage]} />
           </View>
 
           {/* Product Details */}
@@ -125,18 +138,36 @@ const ProductDetailsPage = ({route}) => {
             <View style={styles.ratingContainer}>
               <Icon name="star" size={20} color="#FFD700" />
               <Text style={styles.ratingText}>{product.rating}</Text>
-              <Text style={styles.ratingCount}>(1,234 reviews)</Text>
+              <Text style={styles.ratingCount}>({productData?.reviewCount || 0} reviews)</Text>
             </View>
 
             {/* Price and Discount */}
-            <View style={styles.priceContainer}>
-              <Text style={styles.price}>{product.price}</Text>
-              <Text style={styles.originalPrice}>{product.originalPrice}</Text>
-              <Text style={styles.discount}>{product.discount}</Text>
-            </View>
+
 
             {/* Description */}
             <Text style={styles.description}>{product.description}</Text>
+
+            {/* Seller Information */}
+            {productData?.sellers?.[0] && (
+              <View style={styles.sellerContainer}>
+                <Text style={styles.sellerTitle}>Sold by:</Text>
+                <Text style={styles.sellerName}>{productData.sellers[0].businessName}</Text>
+                <Text style={styles.sellerAddress}>
+                  {productData.sellers[0].address}, {productData.sellers[0].city}, {productData.sellers[0].state}
+                </Text>
+              </View>
+            )}
+
+            {/* Stock Information */}
+            {productData?.sellers?.[0]?.seller_inventory && (
+              <View style={styles.stockContainer}>
+                <Text style={styles.stockText}>
+                  In stock: {productData.sellers[0].seller_inventory.quantity} units
+                </Text>
+              </View>
+            )}
+
+
 
             {/* Similar Products Section */}
             <Text style={styles.sectionTitle}>Similar Products</Text>
@@ -164,12 +195,27 @@ const ProductDetailsPage = ({route}) => {
 
         {/* Fixed Buttons at Bottom */}
         <View style={styles.fixedButtonContainer}>
-          <TouchableOpacity style={styles.addToCartButton}>
-            <Text style={styles.buttonText}>Add to Cart</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.buyNowButton}>
+          <View style={styles.priceContainer}>
+            <Text style={styles.price}>{product.price}</Text>
+            {product.originalPrice ? (
+              <Text style={styles.originalPrice}>{product.originalPrice}</Text>
+            ) : null}
+            {product.discount ? (
+              <Text style={styles.discount}>{product.discount}</Text>
+            ) : null}
+          </View>
+          <View>
+            <TouchableOpacity
+              style={styles.addToCartButton}
+              onPress={() => handleAddToCart(product.id)}
+            >
+              <Text style={styles.buttonText}>Add to Cart</Text>
+            </TouchableOpacity>
+          </View>
+
+          {/* <TouchableOpacity style={styles.buyNowButton}>
             <Text style={styles.buttonText}>Buy Now</Text>
-          </TouchableOpacity>
+          </TouchableOpacity> */}
         </View>
       </View>
     </View>
@@ -216,7 +262,8 @@ const styles = StyleSheet.create({
   priceContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 20,
+    // marginBottom: 20,
+
   },
   price: {
     fontSize: 22,
@@ -233,6 +280,35 @@ const styles = StyleSheet.create({
   discount: {
     fontSize: 16,
     color: '#FF6F61',
+    fontWeight: 'bold',
+  },
+  sellerContainer: {
+    marginBottom: 15,
+    padding: 10,
+    backgroundColor: '#f0f0f0',
+    borderRadius: 8,
+  },
+  sellerTitle: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 5,
+  },
+  sellerName: {
+    fontSize: 16,
+    color: '#333',
+    marginBottom: 5,
+  },
+  sellerAddress: {
+    fontSize: 14,
+    color: '#666',
+  },
+  stockContainer: {
+    marginBottom: 20,
+  },
+  stockText: {
+    fontSize: 16,
+    color: '#4CAF50',
     fontWeight: 'bold',
   },
   description: {
@@ -309,6 +385,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF',
     padding: 15,
     elevation: 5,
+    justifyContent: 'space-between'
   },
   addToCartButton: {
     flex: 1,
@@ -317,6 +394,7 @@ const styles = StyleSheet.create({
     padding: 15,
     alignItems: 'center',
     marginRight: 10,
+    width: width * 0.4
   },
   buyNowButton: {
     flex: 1,

@@ -69,10 +69,10 @@ export const fetchSubcategoryData = (catId) => async dispatch => {
   }
 };
 
-export const fetchInventoryDataBySubId = (catId) => async dispatch => {
+export const fetchInventoryDataBySubId = (subCId) => async dispatch => {
   try {
     dispatch(subCategoryDataLoading());
-    const { data } = await axiosInstance.get(`subcategory/categories/${catId}/subcategories-with-inventory`);
+    const { data } = await axiosInstance.get(`inventory/getInventory/${subCId}`);
     console.log('data', data);
     if (data) {
       dispatch(subCategoryDataSuccess(data));

@@ -18,7 +18,8 @@ import Icon from 'react-native-vector-icons/MaterialIcons';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchCategories } from '../../redux/Slicers/DashboardSlicer';
 import Carousel from '../../components/Crousel/Crousel';
-import { fetchSubCatWithInv_LAT_LNGDataByCatId } from '../../redux/Slicers/SubcategorySlicer';
+import { fetchInventoryDataBySubId, fetchSubCatWithInv_LAT_LNGDataByCatId } from '../../redux/Slicers/SubcategorySlicer';
+import LongCrousel from '../../components/Crousel/LongCrousel';
 // import Carousel from 'react-native-snap-carousel';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -231,6 +232,27 @@ const superDiscountProducts = [
     discount: 10, // 10% discount
     image: require('../../assets/img/carousel3.jpg'),
   },
+  {
+    id: '4',
+    name: 'Potato Chips',
+    price: 4.99,
+    discount: 10, // 10% discount
+    image: require('../../assets/img/carousel3.jpg'),
+  },
+  {
+    id: '5',
+    name: 'Potato Chips',
+    price: 4.99,
+    discount: 10, // 10% discount
+    image: require('../../assets/img/carousel3.jpg'),
+  },
+  {
+    id: '6',
+    name: 'Potato Chips',
+    price: 4.99,
+    discount: 10, // 10% discount
+    image: require('../../assets/img/carousel3.jpg'),
+  },
 ];
 
 const hourlyDiscountProducts = [
@@ -282,9 +304,10 @@ const Dashboard = props => {
   }, []);
 
   useEffect(() => {
-    dispatch(fetchSubCatWithInv_LAT_LNGDataByCatId(1)).then(res => {
-      if (res?.data) {
-        setSubcategoryData(res?.data[0])
+    dispatch(fetchInventoryDataBySubId(1)).then(res => {
+      console.log('res', res)
+      if (res?.success) {
+        setSubcategoryData(res)
       }
     });
   }, []);
@@ -354,22 +377,22 @@ const Dashboard = props => {
               {product.discount ? (
                 <View style={styles.priceContainer}>
                   <Text style={styles.originalPrice}>
-                    ${product.price.toFixed(2)}
+                    ₹{product.price.toFixed(2)}
                   </Text>
                   <Text style={styles.discountedPrice}>
-                    ${(product.price * (1 - product.discount / 100)).toFixed(2)}
+                    ₹{(product.price * (1 - product.discount / 100)).toFixed(2)}
                   </Text>
                 </View>
               ) : (
                 <Text style={styles.categoryProductPrice}>
-                  ${product.price.toFixed(2)}
+                  ₹{product.price.toFixed(2)}
                 </Text>
               )}
               {/* Add to Cart Button */}
               <TouchableOpacity
                 style={styles.addToCartButton}
                 onPress={() =>
-                  Alert.alert('Added to Cart', `${product.name} added to cart!`)
+                  Alert.alert('Added to Cart', `₹{product.name} added to cart!`)
                 }>
                 <Text style={styles.addToCartText}>Add to Cart</Text>
               </TouchableOpacity>
@@ -389,6 +412,11 @@ const Dashboard = props => {
       </View>
     );
   };
+
+  const handleProductDetails = (dta) => {
+    // console.log('dta', dta)
+    navigation.navigate("ProductDetails", { productData: dta })
+  }
 
   const handleAddToCart = product => {
     console.log('product', product)
@@ -496,11 +524,11 @@ const Dashboard = props => {
           <Carousel superDiscountProducts={superDiscountProducts} />
         </View>
         <View style={styles.discountSection}>
-          <Text style={styles.sectionTitle}>🔥 {subcategoryData?.subcategoryName}</Text>
+          <Text style={styles.sectionTitle}>🔥 {subcategoryData?.subcategory?.subcategoryName}</Text>
 
           <ScrollView horizontal showsHorizontalScrollIndicator={false}>
-            {subcategoryData?.inventories.map((product, index) => (
-              <TouchableOpacity key={index} style={styles.discountProductCard}>
+            {subcategoryData?.inventory.map((product, index) => (
+              <TouchableOpacity key={index} style={styles.discountProductCard} onPress={() => handleProductDetails(product)}>
                 {product?.discount && (
                   <View style={styles.discountBadge}>
                     <Text style={styles.discountText}>
@@ -509,7 +537,12 @@ const Dashboard = props => {
                   </View>
                 )}
                 {product?.image ? <Image
-                  source={product?.image}
+                  source={{
+                    uri: `http://192.168.29.16:8080/${product?.image?.path.replace(
+                      /\\/g,
+                      '/',
+                    )}`,
+                  }}
                   style={styles.discountProductImage}
                 /> : <Image
                   source={require('../../assets/img/placeholder.png')}
@@ -520,10 +553,10 @@ const Dashboard = props => {
                 {product?.discount ? (
                   <View style={styles.priceContainer}>
                     <Text style={styles.originalPrice}>
-                      ${product.price.toFixed(2)}
+                      ₹{product.price.toFixed(2)}
                     </Text>
                     <Text style={styles.discountedPrice}>
-                      $
+                      ₹
                       {(product?.sellers[0]?.seller_inventory?.price * (1 - product?.discount / 100)).toFixed(
                         2,
                       )}
@@ -531,7 +564,7 @@ const Dashboard = props => {
                   </View>
                 ) : (
                   <Text style={styles.discountProductPrice}>
-                    ${product?.sellers[0]?.seller_inventory?.price}
+                    ₹{product?.sellers[0]?.seller_inventory?.price}
                   </Text>
                 )}
 
@@ -582,10 +615,10 @@ const Dashboard = props => {
                 {product.discount ? (
                   <View style={styles.priceContainer}>
                     <Text style={styles.originalPrice}>
-                      ${product.price.toFixed(2)}
+                      ₹{product.price.toFixed(2)}
                     </Text>
                     <Text style={styles.discountedPrice}>
-                      $
+                      ₹
                       {(product.price * (1 - product.discount / 100)).toFixed(
                         2,
                       )}
@@ -593,7 +626,7 @@ const Dashboard = props => {
                   </View>
                 ) : (
                   <Text style={styles.discountProductPrice}>
-                    ${product.price.toFixed(2)}
+                    ₹{product.price.toFixed(2)}
                   </Text>
                 )}
                 {/* Add to Cart Button */}
@@ -615,10 +648,11 @@ const Dashboard = props => {
         {/* Trending Section */}
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionTitle}>Trending Now</Text>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+          <LongCrousel superDiscountProducts={superDiscountProducts} />
+
+          {/* <ScrollView horizontal showsHorizontalScrollIndicator={false}>
             {trendingProducts.map((product, index) => (
               <TouchableOpacity key={index} style={styles.trendingProductCard}>
-                {/* Discount Badge */}
                 {product.discount && (
                   <View style={styles.discountBadge}>
                     <Text style={styles.discountText}>{product.discount}</Text>
@@ -636,7 +670,6 @@ const Dashboard = props => {
                 <Text style={styles.trendingProductRating}>
                   {product.rating}
                 </Text>
-                {/* Add to Cart Button */}
                 <TouchableOpacity
                   style={styles.addToCartButton}
                   onPress={() => handleAddToCart(product)}>
@@ -644,7 +677,7 @@ const Dashboard = props => {
                 </TouchableOpacity>
               </TouchableOpacity>
             ))}
-          </ScrollView>
+          </ScrollView> */}
         </View>
         <View style={styles.shopContainer}>
           <Text style={styles.sectionTitle}>Local Shops Near You</Text>
