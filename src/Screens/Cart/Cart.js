@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,36 +9,51 @@ import {
   Alert,
   ScrollView,
   TextInput,
-  useWindowDimensions, // Import useWindowDimensions
+  useWindowDimensions,
+  RefreshControl,
 } from 'react-native';
 import Header from '../../components/Header';
 import Modal from 'react-native-modal';
+import { useSelector, useDispatch } from 'react-redux';
+import {
+  getCart,
+  updateCart,
+  removeCart,
+  clearCart
+} from '../../redux/Slicers/cartSlicer';
 
 const CartPage = () => {
-  const { width, height } = useWindowDimensions(); // Get screen dimensions
-  const [cartItems, setCartItems] = useState([
-    {
-      id: '1',
-      name: 'Margherita Pizza',
-      price: 12.99,
-      quantity: 1,
-      image: require('../../assets/img/pizza.png'),
-    },
-    {
-      id: '2',
-      name: 'Veggie Burger',
-      price: 9.49,
-      quantity: 2,
-      image: require('../../assets/img/burger.png'),
-    },
-    {
-      id: '3',
-      name: 'Pasta Alfredo',
-      price: 14.99,
-      quantity: 1,
-      image: require('../../assets/img/sushi.png'),
-    },
-  ]);
+  const { width, height } = useWindowDimensions();
+  const dispatch = useDispatch();
+  const { cartData, loading, error } = useSelector(state => state.cartDetails);
+  const { userData, location } = useSelector(state => state.loginData);
+
+  const [isPriceModalVisible, setPriceModalVisible] = useState(false);
+  const [isAddressModalVisible, setAddressModalVisible] = useState(false);
+  const [deliveryAddress, setDeliveryAddress] = useState(
+    '123 Main St, City, Country',
+  );
+  const [refreshing, setRefreshing] = useState(false);
+
+  // Fetch cart data on component mount
+  useEffect(() => {
+    fetchCartData();
+  }, [dispatch]);
+
+  const fetchCartData = useCallback(async () => {
+    try {
+      // Replace '4' with actual user ID from your auth state
+      await dispatch(getCart(userData?.user?.userId));
+    } catch (err) {
+      console.error('Error fetching cart data:', err);
+    }
+  }, [dispatch]);
+
+  const onRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchCartData();
+    setRefreshing(false);
+  }, [fetchCartData]);
 
   const [recommendedProducts] = useState([
     {
@@ -61,31 +76,31 @@ const CartPage = () => {
     },
   ]);
 
-  const [isPriceModalVisible, setPriceModalVisible] = useState(false);
-  const [isAddressModalVisible, setAddressModalVisible] = useState(false);
-  const [deliveryAddress, setDeliveryAddress] = useState(
-    '123 Main St, City, Country',
-  );
-
-  const incrementQuantity = itemId => {
-    setCartItems(prev =>
-      prev.map(item =>
-        item.id === itemId ? { ...item, quantity: item.quantity + 1 } : item,
-      ),
-    );
+  const incrementQuantity = async (cartItemID, currentQuantity) => {
+    try {
+      const newQuantity = currentQuantity + 1;
+      await dispatch(updateCart({ cartItemID, quantity: newQuantity }));
+      // Refresh cart data to get updated quantities
+      await fetchCartData();
+    } catch (err) {
+      Alert.alert('Error', 'Failed to update quantity');
+    }
   };
 
-  const decrementQuantity = itemId => {
-    setCartItems(prev =>
-      prev.map(item =>
-        item.id === itemId && item.quantity > 1
-          ? { ...item, quantity: item.quantity - 1 }
-          : item,
-      ),
-    );
+  const decrementQuantity = async (cartItemID, currentQuantity) => {
+    if (currentQuantity > 1) {
+      try {
+        const newQuantity = currentQuantity - 1;
+        await dispatch(updateCart({ cartItemID, quantity: newQuantity }));
+        // Refresh cart data to get updated quantities
+        await fetchCartData();
+      } catch (err) {
+        Alert.alert('Error', 'Failed to update quantity');
+      }
+    }
   };
 
-  const removeItem = itemId => {
+  const removeItem = async (cartItemID) => {
     Alert.alert(
       'Remove Item',
       'Are you sure you want to remove this item from the cart?',
@@ -93,38 +108,61 @@ const CartPage = () => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Remove',
-          onPress: () =>
-            setCartItems(prev => prev.filter(item => item.id !== itemId)),
+          onPress: async () => {
+            try {
+              await dispatch(removeCart(cartItemID));
+              // Refresh cart data after removal
+              await fetchCartData();
+            } catch (err) {
+              Alert.alert('Error', 'Failed to remove item');
+            }
+          },
         },
       ],
     );
   };
 
-  const calculateTotal = () =>
-    cartItems.reduce((total, item) => total + item.price * item.quantity, 0);
+  const handleAddToCart = (productId) => {
+    // Implement add to cart functionality for recommended products
+    Alert.alert('Add to Cart', `Product ${productId} added to cart`);
+  };
 
   const renderItem = ({ item }) => (
     <View style={styles(width).cartItem}>
-      <Image source={item.image} style={styles(width).itemImage} />
+      <Image
+        source={item.inventory?.image
+          ? {
+            uri: `http://192.168.29.16:8080/${item.inventory.image?.path.replace(
+              /\\/g,
+              '/',
+            )}`,
+          }
+          : require('../../assets/img/placeholder.png')
+        }
+        style={styles(width).itemImage}
+      />
       <View style={styles(width).itemDetails}>
-        <Text style={styles(width).itemName}>{item.name}</Text>
-        <Text style={styles(width).itemPrice}>${item.price.toFixed(2)}</Text>
+        <Text style={styles(width).itemName}>{item.inventory?.name || 'Product'}</Text>
+        <Text style={styles(width).itemPrice}>₹{item.currentPrice || '0.00'}</Text>
+        <Text style={styles(width).sellerName}>
+          Sold by: {item.seller?.businessName || 'Unknown Seller'}
+        </Text>
         <View style={styles(width).quantityContainer}>
           <TouchableOpacity
-            onPress={() => decrementQuantity(item.id)}
+            onPress={() => decrementQuantity(item.cartItemID, item.quantity)}
             style={styles(width).quantityButton}>
             <Text style={styles(width).quantityText}>-</Text>
           </TouchableOpacity>
           <Text style={styles(width).quantityText}>{item.quantity}</Text>
           <TouchableOpacity
-            onPress={() => incrementQuantity(item.id)}
+            onPress={() => incrementQuantity(item.cartItemID, item.quantity)}
             style={styles(width).quantityButton}>
             <Text style={styles(width).quantityText}>+</Text>
           </TouchableOpacity>
         </View>
       </View>
       <TouchableOpacity
-        onPress={() => removeItem(item.id)}
+        onPress={() => removeItem(item.cartItemID)}
         style={styles(width).removeButton}>
         <Text style={styles(width).removeText}>Remove</Text>
       </TouchableOpacity>
@@ -139,22 +177,69 @@ const CartPage = () => {
         ${item.price.toFixed(2)}
       </Text>
       <TouchableOpacity
-              style={styles.addToCartSmallButton}
-              onPress={() => handleAddToCart(item.id)}>
-              <Text style={styles.addToCartSmallButtonText}>Add to Cart</Text>
-            </TouchableOpacity>
+        style={styles(width).addToCartSmallButton}
+        onPress={() => handleAddToCart(item.id)}>
+        <Text style={styles(width).addToCartSmallButtonText}>Add to Cart</Text>
+      </TouchableOpacity>
     </TouchableOpacity>
   );
+
+  if (loading && !refreshing) {
+    return (
+      <View style={styles(width).container}>
+        <Header title="My Cart" showBackButton={true} showProfileButton={true} />
+        <View style={styles(width).loadingContainer}>
+          <Text>Loading cart...</Text>
+        </View>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={styles(width).container}>
+        <Header title="My Cart" showBackButton={true} showProfileButton={true} />
+        <View style={styles(width).errorContainer}>
+          <Text>Error loading cart: {error}</Text>
+          <TouchableOpacity onPress={fetchCartData} style={styles(width).retryButton}>
+            <Text style={styles(width).retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
+
+  if (!cartData || !cartData?.data?.cartItems || cartData?.data?.cartItems.length === 0) {
+    return (
+      <View style={styles(width).container}>
+        <Header title="My Cart" showBackButton={true} showProfileButton={true} />
+        <ScrollView
+          contentContainerStyle={styles(width).emptyContainer}
+          refreshControl={
+            <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+          }
+        >
+          <Text style={styles(width).emptyText}>Your cart is empty</Text>
+        </ScrollView>
+      </View>
+    );
+  }
 
   return (
     <View style={{ flex: 1 }}>
       <Header title="My Cart" showBackButton={true} showProfileButton={true} />
-      <ScrollView style={styles(width).container}>
+      <ScrollView
+        style={styles(width).container}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+      >
         <FlatList
-          data={cartItems}
-          keyExtractor={item => item.id}
+          data={cartData?.data?.cartItems}
+          keyExtractor={item => item.cartItemID}
           renderItem={renderItem}
           contentContainerStyle={styles(width).cartList}
+          scrollEnabled={false} // Disable internal scrolling since we're in a ScrollView
         />
         {/* You May Also Like Section */}
         <Text style={styles(width).sectionTitle}>You May Also Like</Text>
@@ -181,7 +266,7 @@ const CartPage = () => {
           <TouchableOpacity onPress={() => setPriceModalVisible(true)}>
             <Text style={styles(width).deliveryCardTitle}>To Pay</Text>
             <Text style={styles(width).deliveryCardText}>
-              Total: ${calculateTotal().toFixed(2)}
+              Total: ₹{cartData.data?.totals?.finalAmount || '0.00'}
             </Text>
           </TouchableOpacity>
 
@@ -201,7 +286,7 @@ const CartPage = () => {
       <View style={styles(width).footer}>
         <View style={styles(width).checkoutDetails}>
           <Text style={styles(width).totalText}>
-            Total: ${calculateTotal().toFixed(2)}
+            Total: ₹{cartData.data?.totals?.finalAmount || '0.00'}
           </Text>
           <Text style={styles(width).deliveryAddress}>
             Deliver to: {deliveryAddress}
@@ -221,18 +306,30 @@ const CartPage = () => {
         style={styles(width).modal}>
         <View style={styles(width).modalContent}>
           <Text style={styles(width).modalTitle}>Price Breakdown</Text>
-          {cartItems.map(item => (
-            <View key={item.id} style={styles(width).priceItem}>
-              <Text style={styles(width).priceItemName}>{item.name}</Text>
+          {cartData?.data?.cartItems.map(item => (
+            <View key={item.cartItemID} style={styles(width).priceItem}>
+              <Text style={styles(width).priceItemName}>{item.inventory?.name}</Text>
               <Text style={styles(width).priceItemPrice}>
-                ${(item.price * item.quantity).toFixed(2)}
+                ₹{(parseFloat(item.currentPrice || item.salePrice) * item.quantity).toFixed(2)}
               </Text>
             </View>
           ))}
           <View style={styles(width).totalPrice}>
+            <Text style={styles(width).totalPriceText}>Subtotal</Text>
+            <Text style={styles(width).totalPriceText}>
+              ₹{cartData.data?.totals?.totalAmount || '0.00'}
+            </Text>
+          </View>
+          <View style={styles(width).totalPrice}>
+            <Text style={styles(width).totalPriceText}>Discount</Text>
+            <Text style={styles(width).totalPriceText}>
+              -₹{cartData.data?.totals?.discountAmount || '0.00'}
+            </Text>
+          </View>
+          <View style={styles(width).totalPrice}>
             <Text style={styles(width).totalPriceText}>Total</Text>
             <Text style={styles(width).totalPriceText}>
-              ${calculateTotal().toFixed(2)}
+              ₹{cartData.data?.totals?.finalAmount || '0.00'}
             </Text>
           </View>
           <TouchableOpacity
@@ -271,7 +368,39 @@ const styles = (width) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#F8F8F8',
-    paddingHorizontal: width * 0.04, // 4% of screen width
+    paddingHorizontal: width * 0.04,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  retryButton: {
+    marginTop: 10,
+    backgroundColor: '#FF6F61',
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    borderRadius: 5,
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: width * 0.045,
+    fontWeight: 'bold',
+    color: '#555',
   },
   cartList: {
     paddingBottom: 15,
@@ -289,7 +418,7 @@ const styles = (width) => StyleSheet.create({
     elevation: 2,
   },
   itemImage: {
-    width: width * 0.2, // 20% of screen width
+    width: width * 0.2,
     height: width * 0.2,
     borderRadius: 10,
   },
@@ -299,12 +428,18 @@ const styles = (width) => StyleSheet.create({
     justifyContent: 'space-between',
   },
   itemName: {
-    fontSize: width * 0.04, // 4% of screen width
+    fontSize: width * 0.04,
     fontWeight: 'bold',
   },
+  sellerName: {
+    fontSize: width * 0.03,
+    color: '#777',
+    marginBottom: 5,
+  },
   itemPrice: {
-    fontSize: width * 0.035, // 3.5% of screen width
+    fontSize: width * 0.035,
     color: '#555',
+    marginBottom: 5,
   },
   quantityContainer: {
     flexDirection: 'row',
@@ -312,7 +447,7 @@ const styles = (width) => StyleSheet.create({
     marginTop: 5,
   },
   quantityButton: {
-    width: width * 0.08, // 8% of screen width
+    width: width * 0.08,
     height: width * 0.08,
     justifyContent: 'center',
     alignItems: 'center',
@@ -321,7 +456,7 @@ const styles = (width) => StyleSheet.create({
     borderRadius: 5,
   },
   quantityText: {
-    fontSize: width * 0.04, // 4% of screen width
+    fontSize: width * 0.04,
     fontWeight: 'bold',
     marginHorizontal: 10,
   },
@@ -329,7 +464,7 @@ const styles = (width) => StyleSheet.create({
     justifyContent: 'center',
   },
   removeText: {
-    fontSize: width * 0.035, // 3.5% of screen width
+    fontSize: width * 0.035,
     color: '#FF6F61',
     fontWeight: '600',
   },
@@ -345,17 +480,17 @@ const styles = (width) => StyleSheet.create({
     elevation: 2,
   },
   deliveryCardTitle: {
-    fontSize: width * 0.04, // 4% of screen width
+    fontSize: width * 0.04,
     fontWeight: 'bold',
     marginBottom: 5,
   },
   deliveryCardText: {
-    fontSize: width * 0.035, // 3.5% of screen width
+    fontSize: width * 0.035,
     color: '#555',
     marginBottom: 10,
   },
   sectionTitle: {
-    fontSize: width * 0.045, // 4.5% of screen width
+    fontSize: width * 0.045,
     fontWeight: 'bold',
     marginBottom: 10,
   },
@@ -373,26 +508,41 @@ const styles = (width) => StyleSheet.create({
     shadowOpacity: 0.2,
     shadowRadius: 1.41,
     elevation: 2,
+    width: width * 0.4,
   },
   recommendedProductImage: {
-    width: width * 0.25, // 25% of screen width
+    width: width * 0.25,
     height: width * 0.25,
     borderRadius: 10,
   },
   recommendedProductName: {
-    fontSize: width * 0.035, // 3.5% of screen width
+    fontSize: width * 0.035,
     fontWeight: 'bold',
     marginTop: 5,
+    textAlign: 'center',
   },
   recommendedProductPrice: {
-    fontSize: width * 0.035, // 3.5% of screen width
+    fontSize: width * 0.035,
     color: '#555',
+    marginBottom: 5,
+  },
+  addToCartSmallButton: {
+    backgroundColor: '#FF6F61',
+    borderRadius: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    marginTop: 5,
+  },
+  addToCartSmallButtonText: {
+    color: 'white',
+    fontSize: width * 0.03,
+    fontWeight: 'bold',
   },
   footer: {
     borderTopWidth: 1,
     borderColor: '#ddd',
     paddingVertical: 10,
-    paddingHorizontal: width * 0.04, // 4% of screen width
+    paddingHorizontal: width * 0.04,
     backgroundColor: 'white',
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -402,23 +552,23 @@ const styles = (width) => StyleSheet.create({
     flex: 1,
   },
   totalText: {
-    fontSize: width * 0.04, // 4% of screen width
+    fontSize: width * 0.04,
     fontWeight: 'bold',
   },
   deliveryAddress: {
-    fontSize: width * 0.035, // 3.5% of screen width
+    fontSize: width * 0.035,
     color: '#555',
   },
   checkoutButton: {
     backgroundColor: '#FF6F61',
     borderRadius: 10,
     paddingVertical: 12,
-    paddingHorizontal: width * 0.06, // 6% of screen width
+    paddingHorizontal: width * 0.06,
     alignItems: 'center',
   },
   checkoutText: {
     color: 'white',
-    fontSize: width * 0.04, // 4% of screen width
+    fontSize: width * 0.04,
     fontWeight: 'bold',
   },
   modal: {
@@ -432,7 +582,7 @@ const styles = (width) => StyleSheet.create({
     borderTopRightRadius: 20,
   },
   modalTitle: {
-    fontSize: width * 0.045, // 4.5% of screen width
+    fontSize: width * 0.045,
     fontWeight: 'bold',
     marginBottom: 15,
   },
@@ -442,11 +592,11 @@ const styles = (width) => StyleSheet.create({
     marginBottom: 10,
   },
   priceItemName: {
-    fontSize: width * 0.035, // 3.5% of screen width
+    fontSize: width * 0.035,
     color: '#555',
   },
   priceItemPrice: {
-    fontSize: width * 0.035, // 3.5% of screen width
+    fontSize: width * 0.035,
     fontWeight: 'bold',
   },
   totalPrice: {
@@ -458,7 +608,7 @@ const styles = (width) => StyleSheet.create({
     borderColor: '#ddd',
   },
   totalPriceText: {
-    fontSize: width * 0.04, // 4% of screen width
+    fontSize: width * 0.04,
     fontWeight: 'bold',
   },
   closeButton: {
@@ -470,7 +620,7 @@ const styles = (width) => StyleSheet.create({
   },
   closeButtonText: {
     color: 'white',
-    fontSize: width * 0.04, // 4% of screen width
+    fontSize: width * 0.04,
     fontWeight: 'bold',
   },
   addressInput: {
@@ -488,7 +638,7 @@ const styles = (width) => StyleSheet.create({
   },
   saveButtonText: {
     color: 'white',
-    fontSize: width * 0.04, // 4% of screen width
+    fontSize: width * 0.04,
     fontWeight: 'bold',
   },
 });

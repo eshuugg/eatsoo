@@ -20,6 +20,7 @@ import { fetchCategories } from '../../redux/Slicers/DashboardSlicer';
 import Carousel from '../../components/Crousel/Crousel';
 import { fetchInventoryDataBySubId, fetchSubCatWithInv_LAT_LNGDataByCatId } from '../../redux/Slicers/SubcategorySlicer';
 import LongCrousel from '../../components/Crousel/LongCrousel';
+import { addToCart } from '../../redux/Slicers/cartSlicer';
 // import Carousel from 'react-native-snap-carousel';
 
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -287,7 +288,9 @@ const Dashboard = props => {
 
 
   const navigation = useNavigation();
-  const { location } = useSelector(state => state.loginData);
+  const { userData, location } = useSelector(state => state.loginData);
+
+  console.log('userData,', userData,)
 
   const dispatch = useDispatch();
 
@@ -418,8 +421,18 @@ const Dashboard = props => {
     navigation.navigate("ProductDetails", { productData: dta })
   }
 
-  const handleAddToCart = product => {
+  const handleAddToCart = async product => {
     console.log('product', product)
+    const dta = {
+      userID: Number(userData?.user?.userId),
+      sessionID: "",
+      inventoryID: Number(product?.inventoryID),
+      sellerID: Number(product?.sellers[0]?.sellerID),
+      // quantity: ,
+    }
+    await dispatch(addToCart(dta)).then(res => {
+      console.log('res', res)
+    })
   };
 
   console.log('subcategoryData', subcategoryData)
